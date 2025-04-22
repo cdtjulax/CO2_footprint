@@ -1,0 +1,619 @@
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CO₂-eq calculator</title>
+    
+    <!-- Include Select2 CSS & JS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+
+    <style>
+        .select2-container {
+        width: auto !important;
+        min-width: 200px;
+        }
+
+        .select2-container--default .select2-selection--single {
+            background-color: #fff;
+            border: 1px solid #d1d5db; /* Tailwind gray-300 */
+            border-radius: 0.375rem; /* rounded-md */
+            padding: 0.5rem;
+            height: auto;
+            min-height: 2.5rem;
+        }
+
+        .select2-selection__rendered {
+            color: #374151; /* Tailwind gray-700 */
+            font-size: 0.875rem; /* text-sm */
+            line-height: 1.25rem;
+        }
+
+        .select2-selection__arrow {
+            height: 100%;
+            top: 0.5rem;
+            right: 0.5rem;
+        }
+
+        .select2-container--default .select2-selection--single:focus,
+        .select2-container--default .select2-selection--single:hover {
+            border-color: #4f46e5; /* Tailwind primary */
+            outline: none;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #4f46e5;
+            color: white;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              colors: {
+                primary: '#4f46e5',
+                secondary: '#64748b',
+              }
+            }
+          }
+        }
+      </script>      
+</head>
+<body>
+    <body class="bg-gray-50 font-sans text-gray-800">
+        <div class="max-w-7xl mx-auto p-6">
+            <h1 class="text-3xl font-bold mb-6 text-center text-primary">CO₂-eq Calculator</h1>
+        
+            <!-- Reset Button -->
+            <div class="text-center mt-6">
+                <button onclick="resetForm()" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition">
+                Reset
+                </button>
+            </div>
+              
+            <div class="flex flex-col lg:flex-row gap-8">
+                <!-- Left: Inputs -->
+                <div class="lg:w-1/2 bg-white p-6 rounded-xl shadow-md space-y-4">
+                    <!-- Inputs here -->
+                    <label class="block text-sm font-medium">Select Country of Origin:</label>
+                    <select id="origin" class="w-full p-2 border border-gray-300 rounded-md"></select>
+                
+                    <label class="block text-sm font-medium">Select Destination:</label>
+                    <select id="destination" class="w-full p-2 border border-gray-300 rounded-md"></select>
+                
+                    <label class="block text-sm font-medium">Select Transport Mode:</label>
+                    <select id="transport" class="w-full p-2 border border-gray-300 rounded-md"></select>
+                
+                    <label class="block text-sm font-medium">Select Material:</label>
+                    <select id="material" class="w-full p-2 border border-gray-300 rounded-md"></select>
+                
+                    <label class="block text-sm font-medium">Enter Weight (kg):</label>
+                    <input id="weight" type="number" min="0" step="0.1" class="w-full p-2 border border-gray-300 rounded-md" placeholder="e.g. 1.5" />
+                
+                    <div class="text-center mt-4">
+                        <button onclick="calculate()" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition">
+                        Calculate carbon footprint
+                        </button>
+                    </div>
+                </div>
+            
+                <!-- Right: Chart -->
+                <div class="lg:w-1/2 bg-white p-6 rounded-xl shadow-md">
+                <div id="result" class="mt-4 text-center text-lg font-semibold text-secondary"></div>
+                <div class="w-full" style="height: 400px;">
+                    <canvas id="emissionChart" width="800" height="400"></canvas>
+                </div>
+                </div>
+            </div>
+        </div>
+    </body>
+      
+    <script>
+        // JSON data with countries
+        const countries = {
+            "AFG": {'name': 'Afghanistan', 'latitude': 33.7680065, 'longitude': 66.2385139},
+            "ALB": {'name': 'Albania', 'latitude': 41.000028, 'longitude': 19.9999619},
+            "DZA": {'name': 'Algeria', 'latitude': 28.0000272, 'longitude': 2.9999825},
+            "ASM": {'name': 'American Samoa', 'latitude': -14.297124, 'longitude': -170.7131481},
+            "AGO": {'name': 'Angola', 'latitude': -11.8775768, 'longitude': 17.5691241},
+            "ATG": {'name': 'Antigua and Barbuda', 'latitude': 17.2234721, 'longitude': -61.9554608},
+            "ARG": {'name': 'Argentina', 'latitude': -34.9964963, 'longitude': -64.9672817},
+            "ARM": {'name': 'Armenia', 'latitude': 40.7696272, 'longitude': 44.6736646},
+            "ABW": {'name': 'Aruba', 'latitude': 12.5013629, 'longitude': -69.9618475},
+            "AUS": {'name': 'Australia', 'latitude': -24.7761086, 'longitude': 134.755},
+            "AUT": {'name': 'Austria', 'latitude': 47.59397, 'longitude': 14.12456},
+            "AZE": {'name': 'Azerbaijan', 'latitude': 40.3936294, 'longitude': 47.7872508},
+            "BHS": {'name': 'Bahamas (the)', 'latitude': 24.7736546, 'longitude': -78.0000547},
+            "BHR": {'name': 'Bahrain', 'latitude': 26.1551249, 'longitude': 50.5344606},
+            "BGD": {'name': 'Bangladesh', 'latitude': 24.4769288, 'longitude': 90.2934413},
+            "BRB": {'name': 'Barbados', 'latitude': 13.1500331, 'longitude': -59.5250305},
+            "BLR": {'name': 'Belarus', 'latitude': 53.4250605, 'longitude': 27.6971358},
+            "BEL": {'name': 'Belgium', 'latitude': 50.6402809, 'longitude': 4.6667145},
+            "BLZ": {'name': 'Belize', 'latitude': 17.1204943, 'longitude': -88.6859028},
+            "BEN": {'name': 'Benin', 'latitude': 9.5293472, 'longitude': 2.2584408},
+            "BMU": {'name': 'Bermuda', 'latitude': 32.3040273, 'longitude': -64.7563086},
+            "BTN": {'name': 'Bhutan', 'latitude': 27.549511, 'longitude': 90.5119273},
+            "BOL": {'name': 'Bolivia', 'latitude': -17.0568696, 'longitude': -64.9912286},
+            "BIH": {'name': 'Bosnia Herzegovina', 'latitude': 44.3053476, 'longitude': 17.5961467},
+            "BWA": {'name': 'Botswana', 'latitude': -23.1681782, 'longitude': 24.5928742},
+            "BRA": {'name': 'Brazil', 'latitude': -10.3333333, 'longitude': -53.2},
+            "BRN": {'name': 'Brunei Darussalam', 'latitude': 4.4137155, 'longitude': 114.5653908},
+            "BGR": {'name': 'Bulgaria', 'latitude': 42.6073975, 'longitude': 25.4856617},
+            "BFA": {'name': 'Burkina Faso', 'latitude': 12.0753083, 'longitude': -1.6880314},
+            "BDI": {'name': 'Burundi', 'latitude': -3.426449, 'longitude': 29.9324519},
+            "CPV": {'name': 'Cabo Verde', 'latitude': 16.0000552, 'longitude': -24.0083947},
+            "KHM": {'name': 'Cambodia', 'latitude': 12.5433216, 'longitude': 104.8144914},
+            "CMR": {'name': 'Cameroon', 'latitude': 4.6125522, 'longitude': 13.1535811},
+            "CAN": {'name': 'Canada', 'latitude': 61.0666922, 'longitude': -107.991707},
+            "CYM": {'name': 'Cayman Islands (the)', 'latitude': 19.280288, 'longitude': -81.3839046},
+            "CAF": {'name': 'Central African Republic (the)', 'latitude': 7.0, 'longitude': 21.0},
+            "TCD": {'name': 'Chad', 'latitude': 15.6134137, 'longitude': 19.0156172},
+            "CHL": {'name': 'Chile', 'latitude': -31.7613365, 'longitude': -71.3187697},
+            "CHN": {'name': 'China', 'latitude': 35.0000663, 'longitude': 104.999955},
+            "COL": {'name': 'Colombia', 'latitude': 4.099917, 'longitude': -72.9088133},
+            "COM": {'name': 'Comoros (the)', 'latitude': -12.2045176, 'longitude': 44.2832964},
+            "COD": {'name': 'Congo (the Democratic Republic of the)', 'latitude': 38.914549, 'longitude': -77.0391303},
+            "COG": {'name': 'Congo (the)', 'latitude': -2.9814344, 'longitude': 23.8222636},
+            "COK": {'name': 'Cook Islands (the)', 'latitude': -21.2005384, 'longitude': -159.8062904},
+            "CRI": {'name': 'Costa Rica', 'latitude': 10.2735633, 'longitude': -84.0739102},
+            "CIV": {'name': "Cote d'Ivoire", 'latitude': 7.9897371, 'longitude': -5.5679458},
+            "HRV": {'name': 'Croatia', 'latitude': 45.3658443, 'longitude': 15.6575209},
+            "CUB": {'name': 'Cuba', 'latitude': 23.0131338, 'longitude': -80.8328748},
+            "CYP": {'name': 'Cyprus', 'latitude': 34.9823018, 'longitude': 33.1451285},
+            "CZE": {'name': 'Czechia', 'latitude': 49.7439047, 'longitude': 15.3381061},
+            "DNK": {'name': 'Denmark', 'latitude': 55.670249, 'longitude': 10.3333283},
+            "DJI": {'name': 'Djibouti', 'latitude': 11.8145966, 'longitude': 42.8453061},
+            "DMA": {'name': 'Dominica', 'latitude': 15.4113138, 'longitude': -61.3653618},
+            "DOM": {'name': 'Dominican Republic (the)', 'latitude': 35.6592977, 'longitude': 139.7220452},
+            "ECU": {'name': 'Ecuador', 'latitude': -1.3397668, 'longitude': -79.3666965},
+            "EGY": {'name': 'Egypt', 'latitude': 26.2540493, 'longitude': 29.2675469},
+            "SLV": {'name': 'El Salvador', 'latitude': 13.8000382, 'longitude': -88.9140683},
+            "GNQ": {'name': 'Equatorial Guinea', 'latitude': 1.613172, 'longitude': 10.5170357},
+            "ERI": {'name': 'Eritrea', 'latitude': 15.9500319, 'longitude': 37.9999668},
+            "EST": {'name': 'Estonia', 'latitude': 58.7523778, 'longitude': 25.3319078},
+            "SWZ": {'name': 'Eswatini', 'latitude': -26.5624806, 'longitude': 31.3991317},
+            "ETH": {'name': 'Ethiopia', 'latitude': 10.2116702, 'longitude': 38.6521203},
+            "FRO": {'name': 'Faroe Islands (the)', 'latitude': 62.0220528, 'longitude': -6.7846549},
+            "FJI": {'name': 'Fiji', 'latitude': -18.1239696, 'longitude': 179.0122737},
+            "FIN": {'name': 'Finland', 'latitude': 63.2467777, 'longitude': 25.9209164},
+            "FRA": {'name': 'France', 'latitude': 46.603354, 'longitude': 1.8883335},
+            "GUF": {'name': 'French Guiana', 'latitude': 4.0039882, 'longitude': -52.999998},
+            "PYF": {'name': 'French Polynesia', 'latitude': -17.0243749, 'longitude': -144.6434898},
+            "GAB": {'name': 'Gabon', 'latitude': -0.8999695, 'longitude': 11.6899699},
+            "GMB": {'name': 'Gambia (the)', 'latitude': 13.470062, 'longitude': -15.4900464},
+            "GEO": {'name': 'Georgia', 'latitude': 32.3293809, 'longitude': -83.1137366},
+            "DEU": {'name': 'Germany', 'latitude': 51.1638175, 'longitude': 10.4478313},
+            "GHA": {'name': 'Ghana', 'latitude': 8.0300284, 'longitude': -1.0800271},
+            "GIB": {'name': 'Gibraltar', 'latitude': 36.1285933, 'longitude': -5.3474761},
+            "GRC": {'name': 'Greece', 'latitude': 38.9953683, 'longitude': 21.9877132},
+            "GRL": {'name': 'Greenland', 'latitude': 77.6192349, 'longitude': -42.8125967},
+            "GRD": {'name': 'Grenada', 'latitude': 12.1360374, 'longitude': -61.6904045},
+            "GLP": {'name': 'Guadeloupe', 'latitude': 16.2528827, 'longitude': -61.5686855},
+            "GUM": {'name': 'Guam', 'latitude': 13.4499943, 'longitude': 144.7651677},
+            "GTM": {'name': 'Guatemala', 'latitude': 15.5855545, 'longitude': -90.345759},
+            "GIN": {'name': 'Guinea', 'latitude': 10.7226226, 'longitude': -10.7083587},
+            "GNB": {'name': 'Guinea-Bissau', 'latitude': 11.815215, 'longitude': -15.2351044},
+            "GUY": {'name': 'Guyana', 'latitude': 4.8417097, 'longitude': -58.6416891},
+            "HTI": {'name': 'Haiti', 'latitude': 19.1399952, 'longitude': -72.3570972},
+            "HND": {'name': 'Honduras', 'latitude': 15.2572432, 'longitude': -86.0755145},
+            "HKG": {'name': 'Hong Kong', 'latitude': 22.350627, 'longitude': 114.1849161},
+            "HUN": {'name': 'Hungary', 'latitude': 47.1817585, 'longitude': 19.5060937},
+            "ISL": {'name': 'Iceland', 'latitude': 64.9841821, 'longitude': -18.1059013},
+            "IND": {'name': 'India', 'latitude': 22.3511148, 'longitude': 78.6677428},
+            "IDN": {'name': 'Indonesia', 'latitude': -2.4833826, 'longitude': 117.8902853},
+            "IRN": {'name': 'Iran (Islamic Republic of)', 'latitude': 32.6475314, 'longitude': 54.5643516},
+            "IRQ": {'name': 'Iraq', 'latitude': 33.0955793, 'longitude': 44.1749775},
+            "IRL": {'name': 'Ireland', 'latitude': 52.865196, 'longitude': -7.9794599},
+            "ISR": {'name': 'Israel', 'latitude': 30.8124247, 'longitude': 34.8594762},
+            "ITA": {'name': 'Italy', 'latitude': 42.6384261, 'longitude': 12.674297},
+            "JAM": {'name': 'Jamaica', 'latitude': 18.1850507, 'longitude': -77.3947693},
+            "JPN": {'name': 'Japan', 'latitude': 36.5748441, 'longitude': 139.2394179},
+            "JOR": {'name': 'Jordan', 'latitude': 31.1667049, 'longitude': 36.941628},
+            "KAZ": {'name': 'Kazakhstan', 'latitude': 48.1012954, 'longitude': 66.7780818},
+            "KEN": {'name': 'Kenya', 'latitude': 1.4419683, 'longitude': 38.4313975},
+            "KIR": {'name': 'Kiribati', 'latitude': 0.3448612, 'longitude': 173.6641773},
+            "PRK": {'name': "Korea (the Democratic People's Republic of)", 'latitude': -8.36667, 'longitude': 124.1},
+            "KOS": {'name': 'Kosovo', 'latitude': 42.5869578, 'longitude': 20.9021231},
+            "KWT": {'name': 'Kuwait', 'latitude': 29.2733964, 'longitude': 47.4979476},
+            "KGZ": {'name': 'Kyrgyzstan', 'latitude': 41.5089324, 'longitude': 74.724091},
+            "LAO": {'name': "Lao People's Democratic Republic (the)", 'latitude': 20.0171109, 'longitude': 103.378253},
+            "LVA": {'name': 'Latvia', 'latitude': 56.8406494, 'longitude': 24.7537645},
+            "LBN": {'name': 'Lebanon', 'latitude': 33.8750629, 'longitude': 35.843409},
+            "LSO": {'name': 'Lesotho', 'latitude': -29.6039267, 'longitude': 28.3350193},
+            "LBR": {'name': 'Liberia', 'latitude': 5.7499721, 'longitude': -9.3658524},
+            "LBY": {'name': 'Libya', 'latitude': 26.8234472, 'longitude': 18.1236723},
+            "LTU": {'name': 'Lithuania', 'latitude': 55.3500003, 'longitude': 23.7499997},
+            "LUX": {'name': 'Luxembourg', 'latitude': 49.8158683, 'longitude': 6.1296751},
+            "MAC": {'name': 'Macao', 'latitude': 22.1757605, 'longitude': 113.5514142},
+            "MDG": {'name': 'Madagascar', 'latitude': -18.9249604, 'longitude': 46.4416422},
+            "MWI": {'name': 'Malawi', 'latitude': -13.2687204, 'longitude': 33.9301963},
+            "MYS": {'name': 'Malaysia', 'latitude': 4.5693754, 'longitude': 102.2656823},
+            "MDV": {'name': 'Maldives', 'latitude': 3.7203503, 'longitude': 73.2244152},
+            "MLI": {'name': 'Mali', 'latitude': 16.3700359, 'longitude': -2.2900239},
+            "MLT": {'name': 'Malta', 'latitude': 35.8885993, 'longitude': 14.4476911},
+            "MTQ": {'name': 'Martinique', 'latitude': 14.6113732, 'longitude': -60.9620777},
+            "MRT": {'name': 'Mauritania', 'latitude': 20.2540382, 'longitude': -9.2399263},
+            "MUS": {'name': 'Mauritius', 'latitude': -20.2759451, 'longitude': 57.5703566},
+            "MEX": {'name': 'Mexico', 'latitude': 23.6585116, 'longitude': -102.0077097},
+            "MDA": {'name': 'Moldova', 'latitude': 47.2879608, 'longitude': 28.5670941},
+            "MNG": {'name': 'Mongolia', 'latitude': 46.8250388, 'longitude': 103.8499736},
+            "MNE": {'name': 'Montenegro', 'latitude': 42.9868853, 'longitude': 19.5180992},
+            "MSR": {'name': 'Montserrat', 'latitude': 16.7417041, 'longitude': -62.1916844},
+            "MAR": {'name': 'Morocco', 'latitude': 31.1728205, 'longitude': -7.3362482},
+            "MOZ": {'name': 'Mozambique', 'latitude': -19.302233, 'longitude': 34.9144977},
+            "MMR": {'name': 'Myanmar', 'latitude': 17.1750495, 'longitude': 95.9999652},
+            "NRU": {'name': 'Nauru', 'latitude': -0.5252306, 'longitude': 166.9324426},
+            "NPL": {'name': 'Nepal', 'latitude': 28.3780464, 'longitude': 83.9999901},
+            "NLD": {'name': 'Netherlands', 'latitude': 52.2434979, 'longitude': 5.6343227},
+            "NCL": {'name': 'New Caledonia', 'latitude': -21.3019905, 'longitude': 165.4880773},
+            "NZL": {'name': 'New Zealand', 'latitude': -41.5000831, 'longitude': 172.8344077},
+            "NIC": {'name': 'Nicaragua', 'latitude': 12.6090157, 'longitude': -85.2936911},
+            "NER": {'name': 'Niger', 'latitude': 17.7356214, 'longitude': 9.3238432},
+            "NGA": {'name': 'Nigeria', 'latitude': 9.6000359, 'longitude': 7.9999721},
+            "NIU": {'name': 'Niue', 'latitude': -19.0536414, 'longitude': -169.861341},
+            "MKD": {'name': 'North Macedonia', 'latitude': 41.6171214, 'longitude': 21.7168387},
+            "NOR": {'name': 'Norway', 'latitude': 61.1529386, 'longitude': 8.7876653},
+            "OMN": {'name': 'Oman', 'latitude': 21.0000287, 'longitude': 57.0036901},
+            "PAK": {'name': 'Pakistan', 'latitude': 30.3308401, 'longitude': 71.247499},
+            "PSE": {'name': 'Palestine, State of', 'latitude': 42.2089038, 'longitude': -79.4684968},
+            "PAN": {'name': 'Panama', 'latitude': 8.559559, 'longitude': -81.1308434},
+            "PNG": {'name': 'Papua New Guinea', 'latitude': -5.6816069, 'longitude': 144.2489081},
+            "PRY": {'name': 'Paraguay', 'latitude': -23.3165935, 'longitude': -58.1693445},
+            "PER": {'name': 'Peru', 'latitude': -6.8699697, 'longitude': -75.0458515},
+            "PHL": {'name': 'Philippines', 'latitude': 12.7503486, 'longitude': 122.7312101},
+            "POL": {'name': 'Poland', 'latitude': 52.215933, 'longitude': 19.134422},
+            "PRT": {'name': 'Portugal', 'latitude': 39.6621648, 'longitude': -8.1353519},
+            "PRI": {'name': 'Puerto Rico', 'latitude': 18.2247706, 'longitude': -66.4858295},
+            "QAT": {'name': 'Qatar', 'latitude': 25.3336984, 'longitude': 51.2295295},
+            "REU": {'name': 'Reunion', 'latitude': -21.1309332, 'longitude': 55.5265771},
+            "ROU": {'name': 'Romania', 'latitude': 45.9852129, 'longitude': 24.6859225},
+            "RUS": {'name': 'Russian Federation', 'latitude': 64.6863136, 'longitude': 97.7453061},
+            "RWA": {'name': 'Rwanda', 'latitude': -1.9646631, 'longitude': 30.0644358},
+            "SHN": {'name': 'Saint Helena, Ascension and Tristan da Cunha', 'latitude': -15.95, 'longitude': -5.7},
+            "KNA": {'name': 'Saint Kitts and Nevis', 'latitude': 17.250512, 'longitude': -62.6725973},
+            "LCA": {'name': 'Saint Lucia', 'latitude': 13.8250489, 'longitude': -60.975036},
+            "SPM": {'name': 'Saint Pierre and Miquelon', 'latitude': 46.8374544, 'longitude': -56.2120555},
+            "VCT": {'name': 'Saint Vincent and the Grenadines', 'latitude': 12.90447, 'longitude': -61.2765569},
+            "WSM": {'name': 'Samoa', 'latitude': -13.7693895, 'longitude': -172.12005},
+            "STP": {'name': 'Sao Tome and Principe', 'latitude': 0.9713095, 'longitude': 7.02255},
+            "SAU": {'name': 'Saudi Arabia', 'latitude': 25.6242618, 'longitude': 42.3528328},
+            "SEN": {'name': 'Senegal', 'latitude': 14.4750607, 'longitude': -14.4529612},
+            "SRB": {'name': 'Serbia', 'latitude': 44.1534121, 'longitude': 20.55144},
+            "SYC": {'name': 'Seychelles', 'latitude': -4.6574977, 'longitude': 55.4540146},
+            "SLE": {'name': 'Sierra Leone', 'latitude': 8.6400349, 'longitude': -11.8400269},
+            "SGP": {'name': 'Singapore', 'latitude': 1.357107, 'longitude': 103.8194992},
+            "SVK": {'name': 'Slovakia', 'latitude': 48.7411522, 'longitude': 19.4528646},
+            "SVN": {'name': 'Slovenia', 'latitude': 46.1199444, 'longitude': 14.8153333},
+            "SLB": {'name': 'Solomon Islands', 'latitude': -8.7053941, 'longitude': 159.1070694},
+            "SOM": {'name': 'Somalia', 'latitude': 8.3676771, 'longitude': 49.083416},
+            "ZAF": {'name': 'South Africa', 'latitude': -28.8166236, 'longitude': 24.991639},
+            "KOR": {'name': 'South Korea', 'latitude': 36.638392, 'longitude': 127.6961188},
+            "ESP": {'name': 'Spain', 'latitude': 39.3260685, 'longitude': -4.8379791},
+            "LKA": {'name': 'Sri Lanka', 'latitude': 7.5554942, 'longitude': 80.7137847},
+            "SDN": {'name': 'Sudan', 'latitude': 14.5844444, 'longitude': 29.4917691},
+            "SUR": {'name': 'Suriname', 'latitude': 4.1413025, 'longitude': -56.0771187},
+            "SWE": {'name': 'Sweden', 'latitude': 59.6749712, 'longitude': 14.5208584},
+            "CHE": {'name': 'Switzerland', 'latitude': 46.7985624, 'longitude': 8.2319736},
+            "SYR": {'name': 'Syrian Arab Republic', 'latitude': 34.6401861, 'longitude': 39.0494106},
+            "TWN": {'name': 'Taiwan', 'latitude': 23.9739374, 'longitude': 120.9820179},
+            "TJK": {'name': 'Tajikistan', 'latitude': 38.6281733, 'longitude': 70.8156541},
+            "TZA": {'name': 'Tanzania', 'latitude': -6.5247123, 'longitude': 35.7878438},
+            "THA": {'name': 'Thailand', 'latitude': 14.8971921, 'longitude': 100.83273},
+            "TLS": {'name': 'Timor-Leste', 'latitude': -8.7443169, 'longitude': 126.063482},
+            "TGO": {'name': 'Togo', 'latitude': 8.7800265, 'longitude': 1.0199765},
+            "TON": {'name': 'Tonga', 'latitude': -19.9160819, 'longitude': -175.202642},
+            "TTO": {'name': 'Trinidad and Tobago', 'latitude': 10.7466905, 'longitude': -61.0840075},
+            "TUN": {'name': 'Tunisia', 'latitude': 33.8439408, 'longitude': 9.400138},
+            "TUR": {'name': 'Turkey', 'latitude': 39.294076, 'longitude': 35.2316631},
+            "TKM": {'name': 'Turkmenistan', 'latitude': 39.3763807, 'longitude': 59.3924609},
+            "TCA": {'name': 'Turks and Caicos Islands', 'latitude': 21.721746, 'longitude': -71.5527809},
+            "UGA": {'name': 'Uganda', 'latitude': 1.5333554, 'longitude': 32.2166578},
+            "UKR": {'name': 'Ukraine', 'latitude': 49.4871968, 'longitude': 31.2718321},
+            "ARE": {'name': 'United Arab Emirates', 'latitude': 24.0002488, 'longitude': 53.9994829},
+            "GBR": {'name': 'United Kingdom', 'latitude': 54.7023545, 'longitude': -3.2765753},
+            "USA": {'name': 'United States of America', 'latitude': 39.7837304, 'longitude': -100.445882},
+            "URY": {'name': 'Uruguay', 'latitude': -32.8755548, 'longitude': -56.0201525},
+            "UZB": {'name': 'Uzbekistan', 'latitude': 41.32373, 'longitude': 63.9528098},
+            "VUT": {'name': 'Vanuatu', 'latitude': -16.5255069, 'longitude': 168.1069154},
+            "VEN": {'name': 'Venezuela', 'latitude': 8.0018709, 'longitude': -66.1109318},
+            "VNM": {'name': 'Vietnam', 'latitude': 15.9266657, 'longitude': 107.9650855},
+            "VGB": {'name': 'Virgin Islands (British)', 'latitude': 18.4024395, 'longitude': -64.5661642},
+            "VIR": {'name': 'Virgin Islands (U.S.)', 'latitude': 17.789187, 'longitude': -64.7080574},
+            "ESH": {'name': 'Western Sahara', 'latitude': 24.1797324, 'longitude': -13.7667848},
+            "YEM": {'name': 'Yemen', 'latitude': 16.3471243, 'longitude': 47.8915271},
+            "ZMB": {'name': 'Zambia', 'latitude': -14.5189121, 'longitude': 27.5589884},
+            "ZWE": {'name': 'Zimbabwe', 'latitude': -18.4554963, 'longitude': 29.7468414}
+        };
+
+        const materials = {
+            AlSi10Mg: { name: "AlSi10Mg", emissionraw: 8.47, emissionatomization: 2.6 },      // kg CO₂-eq / kg
+            Inconel_718: { name: "Inconel 718", emissionraw: 10.9, emissionatomization: 2.87 },
+            SS_316L: { name: "SS 316L", emissionraw: 4.6, emissionatomization: 3.25 },
+            Ti6Al4: { name: "Ti6Al4", emissionraw: 21.4, emissionatomization: 4.03 }
+        };
+
+        const transportModes = {
+            airplane: { name: "Airplane", emissionFactor: 1036 },    //gCO2/ton-km
+            ship: { name: "Ship", emissionFactor: 7 },
+            train: { name: "Train", emissionFactor: 24 },
+            truck: { name: "Truck", emissionFactor: 137 }
+        };
+
+        // Function to calculate the distance between two countries
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Earth's radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c; // Distance in km
+        }
+
+        // Function to populate dropdowns dynamically
+        function updateDropdowns() {
+            const countrySelect1 = $("#origin");
+            const countrySelect2 = $("#destination");
+
+            // Clear dropdowns and ensure they're blank by default
+            countrySelect1.empty().append('<option value=""></option>');
+            countrySelect2.empty().append('<option value=""></option>');
+
+            // Populate dropdowns
+            for (const code in countries) {
+                const country = countries[code];
+                countrySelect1.append(new Option(country.name, code));
+                countrySelect2.append(new Option(country.name, code));
+            }
+
+            // Initialize Select2 with different placeholders for both dropdowns
+            $("#origin").select2({
+                placeholder: "ex : China",
+                allowClear: true,
+                width: 'auto',
+                minimumInputLength: 0  // Ensure the search box is visible immediately
+            }).on('select2:open', function () {
+                document.querySelector('.select2-search__field').focus();
+            }).val("").trigger("change");
+
+            $("#destination").select2({
+                placeholder: "ex : Switzerland",
+                allowClear: true,
+                width: 'auto',
+                minimumInputLength: 0  // Ensure the search box is visible immediately
+            }).on('select2:open', function () {
+                document.querySelector('.select2-search__field').focus();
+            }).val("").trigger("change");
+        }
+
+        function populateTransportModes() {
+            const transportSelect = $("#transport");
+            transportSelect.empty().append('<option value=""></option>');
+
+            for (const mode in transportModes) {
+                const m = transportModes[mode];
+                transportSelect.append(new Option(m.name, mode));
+            }
+
+            transportSelect.select2({
+                placeholder: "Select mode of transport",
+                allowClear: true,
+                width: 'auto',
+                minimumInputLength: 0
+            }).on('select2:open', function () {
+                document.querySelector('.select2-search__field').focus();
+            }).val("").trigger("change");
+        }
+
+        function populateMaterials() {
+            const materialSelect = $("#material");
+            materialSelect.empty().append('<option value=""></option>');
+
+            for (const key in materials) {
+                const mat = materials[key];
+                materialSelect.append(new Option(mat.name, key));
+            }
+
+            materialSelect.select2({
+                placeholder: "Select material",
+                allowClear: true,
+                width: 'auto',
+                minimumInputLength: 0
+            }).on('select2:open', function () {
+                document.querySelector('.select2-search__field').focus();
+            }).val("").trigger("change");
+        }
+
+        let chartInstance = null; // Global variable to hold chart reference
+
+        function calculate() {
+            const originCode = $("#origin").val();
+            const destinationCode = $("#destination").val();
+            const transportMode = $("#transport").val();
+            const materialType = $("#material").val();
+            const weight = parseFloat($("#weight").val());
+
+            if (!originCode || !destinationCode || !transportMode || !materialType || isNaN(weight) || weight <= 0) {
+                $("#result").text("Please select both countries, transport mode, material, and enter a valid weight.");
+                return;
+            }
+
+            const origin = countries[originCode];
+            const destination = countries[destinationCode];
+            const distance = calculateDistance(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
+            const transportEmissionFactor = transportModes[transportMode].emissionFactor;
+            const materialrawEmissionFactor = materials[materialType].emissionraw;
+            const materialatomizationEmissionFactor = materials[materialType].emissionatomization;
+
+            const transportEmissions = (distance * weight * transportEmissionFactor) / 1000 / 1000;
+            const materialrawEmissions = weight * materialrawEmissionFactor;
+            const materialatomizationEmissions = weight * materialatomizationEmissionFactor;
+            const totalEmissions = transportEmissions + materialrawEmissions + materialatomizationEmissions;
+
+            $("#result").html(
+                `Estimated carbon footprint:
+                <span style="display: inline-block; background-color: #f0f8ff; border: 1px solid #ccc; padding: 5px 10px; border-radius: 5px;">
+                <strong>${totalEmissions.toFixed(3)} kg CO<sub>2</sub>-eq</strong></span><br>`
+            );
+
+            //Chart
+            const ctx = document.getElementById('emissionChart').getContext('2d');
+
+            // Destroy any previous chart instance
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Raw material', 'Atomization', 'Transport', 'Total'],
+                    datasets: [{
+                        label: 'CO₂ Emissions (kg)',
+                        data: [materialrawEmissions, materialatomizationEmissions, transportEmissions, totalEmissions],
+                        backgroundColor: ['#60a5fa', '#34d399', '#c084fc', '#facc15'], // blue, green, purple, yellow
+                        borderRadius: 8
+
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    borderRadius: 8,
+                    plugins: {
+                        legend: {
+                        display: false
+                        },
+                        title: {
+                        display: true,
+                        text: 'Carbon footprint by category',
+                        font: {
+                            size: 18,
+                            weight: '600'
+                        },
+                        color: '#1f2937', // gray-800
+                        padding: { top: 10, bottom: 20 }
+                        },
+                        datalabels: {
+                        color: '#374151',
+                        font: {
+                            weight: '600',
+                            size: 12
+                        },
+                        formatter: (value, ctx) => {
+                            const total = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                            const percent = (value / total) * 100;
+                            return `${value.toFixed(1)} kg\n(${percent.toFixed(1)}%)`;
+                        },
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 4
+                        },
+                        tooltip: {
+                        backgroundColor: '#111827', // gray-900
+                        titleFont: { size: 14, weight: 'bold' },
+                        bodyFont: { size: 13 },
+                        padding: 10,
+                        callbacks: {
+                            label: (context) => {
+                            const value = context.raw;
+                            const percent = (value / totalEmissions) * 100;
+                            return `${value.toFixed(2)} kg (${percent.toFixed(1)}%)`;
+                            }
+                        }
+                        }
+                    },
+                    scales: {
+                        x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: '#6b7280', // gray-500
+                            font: { size: 13, weight: '500' }
+                        }
+                        },
+                        y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: '#e5e7eb', // gray-200
+                            drawTicks: false,
+                            borderDash: [4, 4]
+                        },
+                        ticks: {
+                            color: '#9ca3af', // gray-400
+                            font: { size: 12 }
+                        },
+                        title: {
+                            display: true,
+                            text: 'kg CO₂-eq',
+                            font: { size: 13, weight: '500' },
+                            color: '#6b7280'
+                        }
+                        }
+                    },
+                    layout: {
+                        padding: { top: 20, bottom: 10, left: 10, right: 10 }
+                    },
+                    animation: {
+                        duration: 800,
+                        easing: 'easeOutQuart'
+                    },
+                    devicePixelRatio: 5,
+                },
+                plugins: [ChartDataLabels, {
+                    id: 'whiteBackground',
+                    beforeDraw: (chart) => {
+                        const ctx = chart.canvas.getContext('2d');
+                        ctx.save();
+                        ctx.globalCompositeOperation = 'destination-over';
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(0, 0, chart.width, chart.height);
+                        ctx.restore();
+                    }
+                }]
+            });
+        }
+
+        // Initialize dropdowns when the document loads
+        $(document).ready(function() {
+            updateDropdowns();
+            populateTransportModes();
+            populateMaterials();
+            $("#origin").val(localStorage.getItem('origin')).trigger("change");
+            $("#destination").val(localStorage.getItem('destination')).trigger("change");
+            $("#transport").val(localStorage.getItem('transport')).trigger("change");
+            $("#weight").val(localStorage.getItem('weight'));
+            $("#material").val(localStorage.getItem('material')).trigger("change");
+        });
+
+        window.addEventListener('beforeunload', function () {
+            localStorage.setItem('origin', $("#origin").val());
+            localStorage.setItem('destination', $("#destination").val());
+            localStorage.setItem('transport', $("#transport").val());
+            localStorage.setItem('weight', $("#weight").val());
+            localStorage.setItem('material', $("#material").val());
+            });
+
+            function resetForm() {
+                // Clear all values in the dropdowns
+                $("#origin").val(null).trigger("change");
+                $("#destination").val(null).trigger("change");
+                $("#transport").val(null).trigger("change");
+                $("#material").val(null).trigger("change");
+                $("#weight").val(""); // Clear the weight input
+
+                // Clear localStorage
+                localStorage.clear();
+
+                // Optionally, reload the page to reset everything completely
+                location.reload();
+            }
+    </script>
+</body>
+</html>
